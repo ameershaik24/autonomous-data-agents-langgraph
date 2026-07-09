@@ -1,4 +1,5 @@
 import os
+import sqlite3
 from typing import Any, Dict
 
 from dotenv import load_dotenv
@@ -108,3 +109,91 @@ def pdf_extractor_node(state: MultiAgentDataState) -> Dict[str, Any]:
     # If the LLM decides it needs to run the tool, we will return the updated variables
     # LangGraph pre-built ToolNode or a custom edge will handle executing the actual tool next.
     return {"messages": [response]}
+
+
+@tool
+def execute_sql_query(query: str) -> str:
+    """Executes a SQL query against the company_sales.db SQLite database and returns the results or the database error message."""
+    db_path = "company_sales.db"
+
+    try:
+        conn = sqlite3.connect(db_path)
+        # Configure rows to be returned as dictionaries for cleaner upstream parsing
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return "Query executed successfully, but returned 0 results."
+
+        # Convert rows to a list of standard dictionaries
+        result = [dict(row) for row in rows]
+        return str(result)
+
+    except sqlite3.Error as e:
+        # Returning the raw error string is vital for the agent's self-correction loop
+        return f"Database Error: {str(e)}"
+
+
+# Bind the tool to our model specifically for the SQL Engineer Node
+sql_llm_with_tools = llm.bind_tools([execute_sql_query])
+
+
+SQL_ENGINEER_PROMPT = """You are an Expert Data Engineer specializing in writing safe, highly precise SQL queries.
+Your objective is to execute the database retrieval steps outlined in the overall plan.
+
+Database Schema Context:
+- Table: `customers`
+  * customer_id (INTEGER, PRIMARY KEY)
+  * company_name (TEXT)
+  * tier (TEXT) -> values: 'Enterprise', 'Mid-Market', 'SMB'
+  * region (TEXT)
+- Table: `orders`
+  * order_id (INTEGER, PRIMARY KEY)
+  * customer_id (INTEGER, FOREIGN KEY referencing customers.customer_id)
+  * order_date (DATE)
+  * revenue (REAL)
+  * product_category (TEXT)
+
+Qualitative Context Extracted from Operations PDF (Use this to find specific names, regions, or dates mentioned by the user):
+{pdf_context}
+
+The Overall Plan:
+{plan_steps}
+
+Look at the plan steps and use the `execute_sql_query` tool to retrieve the exact data required.
+Do not hallucinate table names or columns. Only pull data that directly answers the plan objectives.
+"""
+
+
+def sql_engineer_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: SQL ENGINEER NODE ---")
+
+    # Safely pull qualitative context from state, or provide a default fallback
+    pdf_context = state.get("pdf_context", "No PDF context extracted yet.")
+    plan_str = "\n".join(
+        [f"{i+1}. {step}" for i, step in enumerate(state["plan_steps"])]
+    )
+
+    # Inject our state variables into the system prompt
+    system_instructions = SQL_ENGINEER_PROMPT.format(
+        pdf_context=pdf_context, plan_steps=plan_str
+    )
+
+    # Prepend system instructions to the full message history
+    messages = [HumanMessage(content=system_instructions)] + state["messages"]
+
+    # Invoke the LLM
+    response = sql_llm_with_tools.invoke(messages)
+
+    # Check if the model generated a tool call (i.e., wrote a SQL query)
+    current_query = ""
+    if response.tool_calls:
+        # Extract the query string from the first tool call arguments
+        current_query = response.tool_calls[0]["args"].get("query", "")
+        print(f"SQL Engineer Generated Query:\n>>> {current_query}")
+
+    return {"messages": [response], "sql_query": current_query}
