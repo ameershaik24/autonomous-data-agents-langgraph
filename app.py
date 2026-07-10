@@ -4,10 +4,12 @@ import sqlite3
 from typing import Any, Dict
 
 from dotenv import load_dotenv
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 from pypdf import PdfReader
 from state import MultiAgentDataState
 
@@ -208,3 +210,153 @@ def sql_engineer_node(state: MultiAgentDataState) -> Dict[str, Any]:
         print(f"SQL Engineer Generated Query:\n>>> {current_query}")
 
     return {"messages": [response], "sql_query": current_query}
+
+
+# 1. Combine all tools into a single node that handles execution
+tools = [search_operations_pdf, execute_sql_query]
+tool_node = ToolNode(tools)
+
+
+# 2. Add an optional State Sync Node (Crucial for multi-agent handoffs)
+# While ToolNode appends raw ToolMessages, we want to extract the results
+# into our custom state variables (pdf_context, sql_result) so downstream agents can read them easily.
+def state_synchronizer_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: STATE SYNCHRONIZER NODE ---")
+
+    updates = {}
+    last_message = state["messages"][-1]
+
+    # If the last message came from a tool execution, let's extract it into our structured state
+    if isinstance(last_message, ToolMessage):
+        if last_message.name == "search_operations_pdf":
+            print("Syncing extracted PDF data into 'pdf_context'...")
+            updates["pdf_context"] = last_message.content
+
+        elif last_message.name == "execute_sql_query":
+            raw_content = last_message.content
+
+            if "Database Error" in raw_content:
+                print(f"Syncing DB Error: {raw_content}")
+                updates["sql_error"] = raw_content
+                updates["sql_result"] = []
+            else:
+                print("Syncing SQL results into 'sql_result'...")
+                # Clear out old errors and save the list
+                updates["sql_error"] = ""
+                updates["sql_result"] = raw_content
+
+    return updates
+
+
+def route_pdf_extractor(state: MultiAgentDataState) -> str:
+    """Decides if the PDF extractor needs to run tools or hand off to the SQL Engineer."""
+    last_message = state["messages"][-1]
+
+    # If the LLM called a tool, route to the tool node
+    if last_message.tool_calls:
+        return "tools"
+
+    # If no tool call was made, it means the agent is done gathering PDF info. Proceed to SQL.
+    return "sql_engineer"
+
+
+def route_sql_engineer(state: MultiAgentDataState) -> str:
+    """Controls the self-correction cycle for the SQL Engineer."""
+    last_message = state["messages"][-1]
+
+    # If the LLM called a tool to query the DB, send it to the tools node
+    if last_message.tool_calls:
+        return "tools"
+
+    # If the tool already executed but threw an error, check the state
+    if state.get("sql_error"):
+        print(
+            ">>> Self-Correction Triggered: Routing back to SQL Engineer to fix syntax error."
+        )
+        return "sql_engineer"
+
+    # If there are no tool calls and no errors, the data was fetched successfully! Proceed to final synthesis.
+    return "final_reporter"
+
+
+# Initialize the graph with our custom state schema
+workflow = StateGraph(MultiAgentDataState)
+
+# 1. Add all our functional nodes to the graph mesh
+workflow.add_node("planner", planner_node)
+workflow.add_node("pdf_extractor", pdf_extractor_node)
+workflow.add_node("sql_engineer", sql_engineer_node)
+workflow.add_node("tools", tool_node)
+workflow.add_node("synchronizer", state_synchronizer_node)
+
+
+# 2. Add structural deterministic edges
+workflow.add_edge(START, "planner")
+workflow.add_edge("planner", "pdf_extractor")
+
+# 3. Add the conditional edges that manage tool execution loops
+workflow.add_conditional_edges(
+    "pdf_extractor",
+    route_pdf_extractor,
+    {"tools": "tools", "sql_engineer": "sql_engineer"},
+)
+
+# When tools finish running for the PDF, sync data and go right back to the PDF agent to review it
+workflow.add_edge("tools", "synchronizer")
+
+
+# Synchronizer decides where to return control based on what tool just ran
+def route_after_sync(state: MultiAgentDataState) -> str:
+    last_message = state["messages"][
+        -2
+    ]  # Look behind the tool message to see who called it
+    if "search_operations_pdf" in str(last_message):
+        return "pdf_extractor"
+    return "sql_engineer"
+
+
+workflow.add_conditional_edges(
+    "synchronizer",
+    route_after_sync,
+    {"pdf_extractor": "pdf_extractor", "sql_engineer": "sql_engineer"},
+)
+
+workflow.add_conditional_edges(
+    "sql_engineer",
+    route_sql_engineer,
+    {
+        "tools": "tools",
+        "sql_engineer": "sql_engineer",  # Self-correction loop path
+        "final_reporter": END,  # Placeholder endpoint for now
+    },
+)
+
+
+def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: FINAL REPORTER NODE ---")
+    print(
+        f"Final Gathered Context to synthesize:\n- PDF Data: {state.get('pdf_context')}\n- SQL Data: {state.get('sql_result')}"
+    )
+    return {
+        "messages": [AIMessage(content="Pipeline execution finished successfully!")]
+    }
+
+
+workflow.add_node("final_reporter", final_reporter_node)
+workflow.add_edge("final_reporter", END)
+
+# Compile the application
+app = workflow.compile()
+print("LangGraph Multi-Agent Mesh Compiled Successfully!")
+
+
+if __name__ == "__main__":
+    test_query = (
+        "Check our Q1 operations review PDF to see what major issue happened in the North region. "
+        "Then, pull the total revenue numbers from the SQL database for any Enterprise customer in that region "
+        "to check their account health."
+    )
+
+    print("Starting Multi-Agent Orchestration Testing...")
+    initial_state = {"messages": [HumanMessage(content=test_query)]}
+    app.invoke(initial_state)
