@@ -1,0 +1,51 @@
+(agents-venv-2) ➜  autonomous-data-agents-langgraph git:(main) ✗ python app.py
+LangGraph Multi-Agent Mesh Compiled Successfully!
+Starting Multi-Agent Orchestration Testing...
+
+--- ENTERING: PLANNER NODE ---
+Generated Plan Steps:
+- 1. Extract the Q1 operations review PDF to identify the specific major issue reported in the North region.
+- 2. Query the SQL database to retrieve the list of all customers categorized as "Enterprise" located within the North region.
+- 3. Query the SQL database to aggregate the total revenue for the identified Enterprise customers in the North region for the Q1 period.
+- 4. Cross-reference the identified major issue from the PDF with the revenue data to assess the impact on account health.
+
+--- ENTERING: PDF EXTRACTOR NODE ---
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing extracted PDF data into 'pdf_context'...
+
+--- ENTERING: PDF EXTRACTOR NODE ---
+
+--- ENTERING: SQL ENGINEER NODE ---
+SQL Engineer Generated Query:
+>>> SELECT customer_id, company_name FROM customers WHERE tier = 'Enterprise' AND region = 'North';
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing SQL results into 'sql_result'...
+
+--- ENTERING: SQL ENGINEER NODE ---
+SQL Engineer Generated Query:
+>>> SELECT SUM(revenue) as total_q1_revenue FROM orders WHERE customer_id = 1 AND order_date BETWEEN '2026-01-01' AND '2026-03-31';
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing SQL results into 'sql_result'...
+
+--- ENTERING: SQL ENGINEER NODE ---
+
+--- ENTERING: FINAL REPORTER NODE ---
+Final Gathered Context to synthesize:
+- PDF Data: --- Retrieved Semantically Correlated Context from Q1_2026_Operations_Review.pdf ---
+Q1 2026 Operations & Support Incident Summary
+
+●​ January 2026: We noticed a critical 45% spike in customer support tickets originating
+exclusively from the North region. Customers reported severe API latency issues.
+●​ February 2026: The latency issue was resolved. However, account management
+notes show that our high-priority account, TechCorp Solutions, expressed deep
+dissatisfaction during this period and threatened to delay their upcoming contract
+expansions.
+●​ March 2026: Operations stabilized globally. Mid-Market accounts in the North region
+reported smooth onboarding.
+
+
+- SQL Data: [{'total_q1_revenue': 95000.0}]
+(agents-venv-2) ➜  autonomous-data-agents-langgraph git:(main) ✗
