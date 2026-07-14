@@ -48,7 +48,7 @@ def planner_node(state: MultiAgentDataState) -> Dict[str, Any]:
     response = chain.invoke({"user_query": user_query})
 
     # Parse the numbered lines into a list of strings
-    raw_steps = response.content.strip().split("\n")
+    raw_steps = response.text.strip().split("\n")
     cleaned_steps = [step.strip() for step in raw_steps if step.strip()]
 
     print(f"Generated Plan Steps:\n" + "\n".join([f"- {s}" for s in cleaned_steps]))
