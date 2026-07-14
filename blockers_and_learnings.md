@@ -12,7 +12,9 @@
     5. compile - compile the graph AFTER adding all the nodes, edges and conditional edges
   - The diagram of the graph that I drew using pen and paper is this - ![Graph Hand Diagram](images/graph_hand_diagram.jpeg)
 
-2. dummy
+2. Reading the PDF properly
+  - Even after using pypdf python package, the extracted text from the pdf contains a lot of newline characters attached to each word before and after. The regex present was not able to capture it properly as well.
+  - So, instead of this pypdf package, used the pymupdf package to better read the pdf document - which uses a powerful C-based engine underneath that natively computes the actual structural reading order and groups paragraphs naturally.
 
 ## 10th July 2026
 
