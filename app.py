@@ -248,6 +248,16 @@ def state_synchronizer_node(state: MultiAgentDataState) -> Dict[str, Any]:
     return updates
 
 
+def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: FINAL REPORTER NODE ---")
+    print(
+        f"Final Gathered Context to synthesize:\n- PDF Data: {state.get('pdf_context')}\n- SQL Data: {state.get('sql_result')}"
+    )
+    return {
+        "messages": [AIMessage(content="Pipeline execution finished successfully!")]
+    }
+
+
 def route_pdf_extractor(state: MultiAgentDataState) -> str:
     """Decides if the PDF extractor needs to run tools or hand off to the SQL Engineer."""
     last_message = state["messages"][-1]
@@ -279,32 +289,6 @@ def route_sql_engineer(state: MultiAgentDataState) -> str:
     return "final_reporter"
 
 
-# Initialize the graph with our custom state schema
-workflow = StateGraph(MultiAgentDataState)
-
-# 1. Add all our functional nodes to the graph mesh
-workflow.add_node("planner", planner_node)
-workflow.add_node("pdf_extractor", pdf_extractor_node)
-workflow.add_node("sql_engineer", sql_engineer_node)
-workflow.add_node("tools", tool_node)
-workflow.add_node("synchronizer", state_synchronizer_node)
-
-
-# 2. Add structural deterministic edges
-workflow.add_edge(START, "planner")
-workflow.add_edge("planner", "pdf_extractor")
-
-# 3. Add the conditional edges that manage tool execution loops
-workflow.add_conditional_edges(
-    "pdf_extractor",
-    route_pdf_extractor,
-    {"tools": "tools", "sql_engineer": "sql_engineer"},
-)
-
-# When tools finish running for the PDF, sync data and go right back to the PDF agent to review it
-workflow.add_edge("tools", "synchronizer")
-
-
 # Synchronizer decides where to return control based on what tool just ran
 def route_after_sync(state: MultiAgentDataState) -> str:
     last_message = state["messages"][
@@ -314,6 +298,33 @@ def route_after_sync(state: MultiAgentDataState) -> str:
         return "pdf_extractor"
     return "sql_engineer"
 
+
+# Initialize the graph with our custom state schema
+workflow = StateGraph(MultiAgentDataState)
+
+# 1. Add ALL nodes first
+workflow.add_node("planner", planner_node)
+workflow.add_node("pdf_extractor", pdf_extractor_node)
+workflow.add_node("sql_engineer", sql_engineer_node)
+workflow.add_node("tools", tool_node)
+workflow.add_node("synchronizer", state_synchronizer_node)
+workflow.add_node("final_reporter", final_reporter_node)
+
+
+# 2. Add ALL structural deterministic edges
+workflow.add_edge(START, "planner")
+workflow.add_edge("planner", "pdf_extractor")
+# When tools finish running for the PDF, sync data and go right back to the PDF agent to review it
+workflow.add_edge("tools", "synchronizer")
+workflow.add_edge("final_reporter", END)
+
+
+# 3. Add the conditional edges that manage tool execution loops
+workflow.add_conditional_edges(
+    "pdf_extractor",
+    route_pdf_extractor,
+    {"tools": "tools", "sql_engineer": "sql_engineer"},
+)
 
 workflow.add_conditional_edges(
     "synchronizer",
@@ -332,20 +343,7 @@ workflow.add_conditional_edges(
 )
 
 
-def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
-    print("\n--- ENTERING: FINAL REPORTER NODE ---")
-    print(
-        f"Final Gathered Context to synthesize:\n- PDF Data: {state.get('pdf_context')}\n- SQL Data: {state.get('sql_result')}"
-    )
-    return {
-        "messages": [AIMessage(content="Pipeline execution finished successfully!")]
-    }
-
-
-workflow.add_node("final_reporter", final_reporter_node)
-workflow.add_edge("final_reporter", END)
-
-# Compile the application
+# 4. Now, compile the graph
 app = workflow.compile()
 print("LangGraph Multi-Agent Mesh Compiled Successfully!")
 
