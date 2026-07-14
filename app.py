@@ -327,7 +327,7 @@ workflow.add_conditional_edges(
     {
         "tools": "tools",
         "sql_engineer": "sql_engineer",  # Self-correction loop path
-        "final_reporter": END,  # Placeholder endpoint for now
+        "final_reporter": "final_reporter",
     },
 )
 
