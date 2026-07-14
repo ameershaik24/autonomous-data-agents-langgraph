@@ -15,6 +15,8 @@ from state import MultiAgentDataState
 
 load_dotenv()
 
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
 # Initialize our primary LLM
 llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0)
 
@@ -66,7 +68,8 @@ def search_operations_pdf(query: str) -> str:
     regional issues, dates, and account management notes."""
     # Production note: In a real pipeline, this would run a hybrid lexical/dense retrieval vector search on Pinecone/Milvus/Qdrant.
     # For my local setup, i'll implement a clean fallback that reads the mock file directly.
-    pdf_path = "Q1_2026_Operations_Review.pdf"
+    pdf_filename = "Q1_2026_Operations_Review.pdf"
+    pdf_path = os.path.join(script_dir, pdf_filename)
 
     if not os.path.exists(pdf_path):
         return "Error: Q1_2026_Operations_Review.pdf file not found."
@@ -84,9 +87,7 @@ def search_operations_pdf(query: str) -> str:
     clean_content = re.sub(r" +", " ", clean_content)
 
     # Simulate high-context keyword extraction to mimic a semantic search response
-    return (
-        f"--- Retrieved Semantically Correlated Context from {pdf_path} ---\n{content}"
-    )
+    return f"--- Retrieved Semantically Correlated Context from {pdf_filename} ---\n{content}"
 
 
 # Bind the tool to our model specifically for the PDF Extractor Agent
@@ -127,7 +128,8 @@ def pdf_extractor_node(state: MultiAgentDataState) -> Dict[str, Any]:
 @tool
 def execute_sql_query(query: str) -> str:
     """Executes a SQL query against the company_sales.db SQLite database and returns the results or the database error message."""
-    db_path = "company_sales.db"
+    db_name = "company_sales.db"
+    db_path = os.path.join(script_dir, db_name)
 
     try:
         conn = sqlite3.connect(db_path)
