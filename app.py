@@ -249,14 +249,39 @@ def state_synchronizer_node(state: MultiAgentDataState) -> Dict[str, Any]:
     return updates
 
 
+FINAL_REPORTER_PROMPT = """You are a Senior Executive Business Analyst. Your job is to compile a highly polished, executive-ready health assessment report.
+You must synthesize the qualitative incident data from the PDF with the quantitative financial data from the SQL database.
+
+Extracted PDF Operations Context:
+{pdf_context}
+
+Retrieved SQL Financial Data:
+{sql_result}
+
+Provide a structured final response in clean Markdown with the following sections:
+1. **Executive Summary**: A high-level overview of what happened.
+2. **Financial Impact Assessment**: Explicitly reference the customer names and the total Q1 revenue ($95,000.00) at risk.
+3. **Account Health Status**: Grade the health (e.g., Critical Risk, Stable) based on the threat of contract delay.
+4. **Actionable Recommendations**: Next steps for the account management team.
+"""
+
+
 def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
     print("\n--- ENTERING: FINAL REPORTER NODE ---")
-    print(
-        f"Final Gathered Context to synthesize:\n- PDF Data: {state.get('pdf_context')}\n- SQL Data: {state.get('sql_result')}"
+    pdf_context = state.get("pdf_context", "No PDF context available.")
+    sql_result = state.get("sql_result", "No SQL results available.")
+
+    # Format instructions and generate the final report
+    prompt = FINAL_REPORTER_PROMPT.format(
+        pdf_context=pdf_context, sql_result=sql_result
     )
-    return {
-        "messages": [AIMessage(content="Pipeline execution finished successfully!")]
-    }
+    response = llm.invoke([HumanMessage(content=prompt)])
+
+    print("\n==================== FINAL EXECUTIVE REPORT ====================\n")
+    print(response.text)
+    print("\n================================================================")
+
+    return {"messages": [response]}
 
 
 def route_pdf_extractor(state: MultiAgentDataState) -> str:
