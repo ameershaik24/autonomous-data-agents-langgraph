@@ -1,8 +1,8 @@
 import os
-import re
 import sqlite3
 from typing import Any, Dict
 
+import pymupdf
 from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -10,7 +10,6 @@ from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
-from pypdf import PdfReader
 from state import MultiAgentDataState
 
 load_dotenv()
@@ -74,20 +73,20 @@ def search_operations_pdf(query: str) -> str:
     if not os.path.exists(pdf_path):
         return "Error: Q1_2026_Operations_Review.pdf file not found."
 
-    reader = PdfReader(pdf_path)
     full_text = []
-    for page in reader.pages:
-        text = page.extract_text()
+
+    pdf_doc = pymupdf.open(pdf_path)
+    for page in pdf_doc:
+        text = page.get_text("text")
         if text:
             full_text.append(text)
 
-    # Combine all pages and clean whitespaces
     content = " ".join(full_text)
-    clean_content = re.sub(r"\s*\n\s*", " ", content)
-    clean_content = re.sub(r" +", " ", clean_content)
+
+    retrieved_content = f"--- Retrieved Semantically Correlated Context from {pdf_filename} ---\n{content}"
 
     # Simulate high-context keyword extraction to mimic a semantic search response
-    return f"--- Retrieved Semantically Correlated Context from {pdf_filename} ---\n{content}"
+    return retrieved_content
 
 
 # Bind the tool to our model specifically for the PDF Extractor Agent
