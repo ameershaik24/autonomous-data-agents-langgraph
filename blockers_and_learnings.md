@@ -1,3 +1,19 @@
+## 14th July 2026
+
+1. After getting all the code (using Gemini) required for basic query testing, I could not wrap my head around what all these functions mean. So, i read through all the generated code and using a pen and paper mapped everything i.e.,
+  - A node is defined by a python function - which can make an llm call, or call a tool, or just update the state
+  - I can link two nodes either through a direct edge (when it's obvious) or through a conditional edge (when the last result determines what to do next)
+  - For a conditional edge, i need to define just another python function which also has access to the state, and return a string - which will be used in the "add_conditional_edges" method to map to the corresponding node.
+  - Langgraph methods
+    1. add_node - requires the name of the node and the corresponding python function
+    2. add_edge - requires just the names of the two nodes
+    3. add_conditional_edges - requires the start node name, then the python function which returns a string conditionally, and a dict which maps the possible str outputs of the python function to the names of the nodes
+    4. StateGraph - method to initialize the graph which works on state object
+    5. compile - compile the graph AFTER adding all the nodes, edges and conditional edges
+  - The diagram of the graph that I drew using pen and paper is this - ![Graph Hand Diagram](images/graph_hand_diagram.jpeg)
+
+2. dummy
+
 ## 10th July 2026
 
 1. **Blocker** - How to get an API key for an LLM (specifically Gemini since I already signed up on Google AI Studio) for this project?
