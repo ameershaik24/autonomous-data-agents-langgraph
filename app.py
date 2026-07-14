@@ -16,7 +16,7 @@ from state import MultiAgentDataState
 load_dotenv()
 
 # Initialize our primary LLM
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+llm = ChatGoogleGenerativeAI(model="gemini-3.1-flash-lite", temperature=0)
 
 PLANNER_PROMPT = """You are the Lead Project Planner for an advanced enterprise data analytics team.
 Your job is to break down a complex user business request into a clear, sequential set of execution steps.
