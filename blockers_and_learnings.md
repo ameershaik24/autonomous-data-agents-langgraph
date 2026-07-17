@@ -2,6 +2,12 @@
 
 1. I was drawing the flow of state from one agent to another neatly using draw.io and understanding each part of it. While doing this, it wasn't making sense as to how can route_sql_engineer send the control back to sql_engineer agent when there's an error in running the generated sql query. Because, if there's an error, the synchronizer agent would update it in the state and the route_after_sync method will send the control back to sql_engineer agent. So, the agent would already see the error through the past messages (which would also include the tool message) and would give a corrected query as tool call again. So, we would never have a flow wherein after the "sql_engineer" agent we would go back to it immediately - we have to either go to tools or to the next final_reporter agent. Thus, the initial code given by gemini had this "dead code" which was never reachable. I understood the flow of state/tokens in the cyclic graph through the drawing and corrected this mistake from vibe code instead of blindly keeping it.
 
+2. After understanding the entire flow of state across all nodes and edges, the doubts that I have are
+   - Is each LLM request a new one separate from the previous ones, without retaining any conversation context? Or is the conversation context retained per agent?
+   - In the cyclic loop present with pdf_extractor and sql_engineer agent nodes, is the same prompt sent again and again?
+   - Why does the current message gets added **before** the previous messages present in **state["messages"]**? Shouldn't it be **after**? Or is Langchain handling it properly inside?
+
+
 ## 14th July 2026
 
 1. After getting all the code (using Gemini) required for basic query testing, I could not wrap my head around what all these functions mean. So, i read through all the generated code and using a pen and paper mapped everything i.e.,
