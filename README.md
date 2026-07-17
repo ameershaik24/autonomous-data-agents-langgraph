@@ -96,6 +96,22 @@ To mitigate the risk to our Q1 revenue and restore the partnership with TechCorp
 ```
 
 
+## 📐 System Architecture & Agent Flow
+
+Below is the architectural blueprint of the multi-agent orchestration mesh. It illustrates the stateless node execution, the centralized `MultiAgentDataState` boundary, and the cyclic self-correction loop that manages the SQL execution.
+
+<p align="center">
+  <img src="images/graph_data_agents_diagram.svg" alt="LangGraph Multi-Agent Architecture Diagram" width="700">
+</p>
+
+### Key Flow Mechanics Highlighted in the Diagram:
+
+1. **State-Driven Routing**: Every **Agent Node** (blue) executes independently and outputs to a **Conditional Router Function** (oval). Rather than hardcoding connections, the routers dynamically direct the flow based on the current state's messages.
+2. **Centralized Tool Execution**: If either the `pdf_extractor` or the `sql_engineer` requires external action, their respective conditional routers redirect the path to the centralized `tools` node (purple).
+3. **The Synchronizer (Function Node)**: After any tool execution completes, the flow passes through the `synchronizer` (orange) to extract raw output strings into structured state variables before the `route_after_sync` router returns control back to the calling agent.
+4. **Self-Correction & Terminal Synthesis**: If a database error occurs, the state is updated, and control loops seamlessly back to the `sql_engineer` to construct a corrected query. Once the data retrieval tasks are fully met without further tool requests, the flow transitions directly to the `final_reporter` for summary generation.
+
+
 ## 💻 Local Installation & Setup
 
 1. **Clone the repository:**
