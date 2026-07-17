@@ -297,21 +297,15 @@ def route_pdf_extractor(state: MultiAgentDataState) -> str:
 
 
 def route_sql_engineer(state: MultiAgentDataState) -> str:
-    """Controls the self-correction cycle for the SQL Engineer."""
+    """Routes control from the SQL Engineer node based on whether it needs to execute a tool."""
     last_message = state["messages"][-1]
 
-    # If the LLM called a tool to query the DB, send it to the tools node
+    # If the agent generated a query tool call (initial or corrected), route to execution
     if last_message.tool_calls:
         return "tools"
 
-    # If the tool already executed but threw an error, check the state
-    if state.get("sql_error"):
-        print(
-            ">>> Self-Correction Triggered: Routing back to SQL Engineer to fix syntax error."
-        )
-        return "sql_engineer"
-
-    # If there are no tool calls and no errors, the data was fetched successfully! Proceed to final synthesis.
+    # If the agent did not make a tool call, it means it has reviewed the data/history
+    # and is ready to hand off to the final report synthesis.
     return "final_reporter"
 
 
