@@ -31,6 +31,11 @@ Instead of relying on a single monolithic prompt, the workflow is split into spe
 
 ## 📊 End-to-End Execution Trace
 
+### The Complex/Ambiguous User Input:
+> Check our Q1 operations review PDF to see what major issue happened in the North region. Then, pull the total revenue numbers from the SQL database for any Enterprise customer in that region to check their account health.
+
+### Execution Trace
+
 ```text
 LangGraph Multi-Agent Mesh Compiled Successfully!
 Starting Multi-Agent Orchestration Testing...
