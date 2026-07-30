@@ -251,7 +251,7 @@ def state_synchronizer_node(state: MultiAgentDataState) -> Dict[str, Any]:
 
 
 FINAL_REPORTER_PROMPT = """You are a Senior Executive Business Analyst. Your job is to compile a highly polished, executive-ready health assessment report.
-You must synthesize the qualitative incident data from the PDF with the quantitative financial data from the SQL database.
+You must synthesize the qualitative incident data from the PDF, the quantitative financial data from the SQL database, and the commercial retention proposal along with its human governance approval status.
 
 Extracted PDF Operations Context:
 {pdf_context}
@@ -259,11 +259,17 @@ Extracted PDF Operations Context:
 Retrieved SQL Financial Data:
 {sql_result}
 
+Commercial Retention Proposal & Governance Decision:
+- Retention Proposal Details: {retention_proposal}
+- Governance Approval Status: {human_approval_status}
+- Management Feedback / Notes: {human_feedback}
+
 Provide a structured final response in clean Markdown with the following sections:
-1. **Executive Summary**: A high-level overview of what happened.
-2. **Financial Impact Assessment**: Explicitly reference the customer names and the total Q1 revenue ($95,000.00) at risk.
-3. **Account Health Status**: Grade the health (e.g., Critical Risk, Stable) based on the threat of contract delay.
-4. **Actionable Recommendations**: Next steps for the account management team.
+1. **Executive Summary**: A high-level overview of what happened and the operational risks identified.
+2. **Financial Impact Assessment**: Explicitly reference the customer names and total revenue at risk.
+3. **Account Health Status**: Grade the health (e.g., Critical Risk) based on support spikes and contract delays.
+4. **Commercial Retention Action & Governance**: Detail the retention offer drafted, whether it was approved or rejected by management, and incorporate any manager notes.
+5. **Actionable Recommendations**: Next steps for the account management team.
 """
 
 
@@ -271,10 +277,17 @@ def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
     print("\n--- ENTERING: FINAL REPORTER NODE ---")
     pdf_context = state.get("pdf_context", "No PDF context available.")
     sql_result = state.get("sql_result", "No SQL results available.")
+    retention_proposal = state.get("retention_proposal", {})
+    human_approval_status = state.get("human_approval_status", "PENDING")
+    human_feedback = state.get("human_feedback", "No feedback provided.")
 
     # Format instructions and generate the final report
     prompt = FINAL_REPORTER_PROMPT.format(
-        pdf_context=pdf_context, sql_result=sql_result
+        pdf_context=pdf_context,
+        sql_result=sql_result,
+        retention_proposal=retention_proposal,
+        human_approval_status=human_approval_status,
+        human_feedback=human_feedback,
     )
     response = llm.invoke([HumanMessage(content=prompt)])
 
