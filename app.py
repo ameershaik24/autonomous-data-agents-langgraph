@@ -473,7 +473,7 @@ workflow.add_edge("human_approval_gate", "final_reporter")
 app = workflow.compile(
     checkpointer=checkpointer, interrupt_before=["human_approval_gate"]
 )
-print("LangGraph Multi-Agent Mesh Compiled Successfully!")
+print("LangGraph Multi-Agent HITL Mesh Compiled Successfully!")
 
 
 if __name__ == "__main__":
@@ -483,7 +483,9 @@ if __name__ == "__main__":
         "to check their account health."
     )
 
-    print("Starting Multi-Agent Orchestration Testing...")
+    print(
+        "Starting Multi-Agent Orchestration with Human-in-the-Loop Governance Testing..."
+    )
 
     # Thread ID is required when using checkpointers to track execution state
     thread_config = {"configurable": {"thread_id": "session-101"}}
