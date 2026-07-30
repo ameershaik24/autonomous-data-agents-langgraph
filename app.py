@@ -371,6 +371,26 @@ SQL Results:
         "messages": [AIMessage(content=str(analysis_dict))],
     }
 
+
+def human_approval_gate_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: HUMAN APPROVAL GATE NODE ---")
+
+    status = state.get("human_approval_status", "REJECTED")
+    feedback = state.get("human_feedback", "No feedback provided.")
+    proposal = state.get("retention_proposal", {})
+
+    print(f"Human Gate Decision Received: {status}")
+    print(f"Human Manager Feedback: {feedback}")
+
+    summary_message = (
+        f"--- HUMAN GOVERNANCE RECORD ---\n"
+        f"Proposal for {proposal.get('client', 'Client')}:\n"
+        f"Status: {status}\n"
+        f"Manager Notes: {feedback}\n"
+    )
+
+    return {"messages": [AIMessage(content=summary_message)]}
+
 # Initialize the graph with our custom state schema
 workflow = StateGraph(MultiAgentDataState)
 
@@ -381,6 +401,7 @@ workflow.add_node("sql_engineer", sql_engineer_node)
 workflow.add_node("tools", tool_node)
 workflow.add_node("synchronizer", state_synchronizer_node)
 workflow.add_node("retention_proposal", retention_proposal_node)
+workflow.add_node("human_approval_gate", human_approval_gate_node)
 workflow.add_node("final_reporter", final_reporter_node)
 
 
