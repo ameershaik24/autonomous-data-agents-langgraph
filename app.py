@@ -484,5 +484,9 @@ if __name__ == "__main__":
     )
 
     print("Starting Multi-Agent Orchestration Testing...")
+
+    # Thread ID is required when using checkpointers to track execution state
+    thread_config = {"configurable": {"thread_id": "session-101"}}
+
     initial_state = {"messages": [HumanMessage(content=test_query)]}
     app.invoke(initial_state)
