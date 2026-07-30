@@ -489,4 +489,8 @@ if __name__ == "__main__":
     thread_config = {"configurable": {"thread_id": "session-101"}}
 
     initial_state = {"messages": [HumanMessage(content=test_query)]}
-    app.invoke(initial_state)
+
+    # Phase 1: Stream graph until it hits the interrupt boundary
+    for event in app.stream(initial_state, config=thread_config):
+        pass  # Running node steps
+
