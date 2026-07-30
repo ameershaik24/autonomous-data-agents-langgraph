@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
@@ -404,6 +405,10 @@ def human_approval_gate_node(state: MultiAgentDataState) -> Dict[str, Any]:
 
     return {"messages": [AIMessage(content=summary_message)]}
 
+
+# Initialize in-memory checkpointer for thread persistence
+checkpointer = InMemorySaver()
+
 # Initialize the graph with our custom state schema
 workflow = StateGraph(MultiAgentDataState)
 
@@ -465,7 +470,9 @@ workflow.add_edge("human_approval_gate", "final_reporter")
 
 
 # 4. Now, compile the graph
-app = workflow.compile()
+app = workflow.compile(
+    checkpointer=checkpointer, interrupt_before=["human_approval_gate"]
+)
 print("LangGraph Multi-Agent Mesh Compiled Successfully!")
 
 
