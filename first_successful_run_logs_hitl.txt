@@ -1,0 +1,95 @@
+(agents-venv-2) ➜  autonomous-data-agents-langgraph git:(feat-human-in-the-loop) ✗ python app.py
+LangGraph Multi-Agent HITL Mesh Compiled Successfully!
+Starting Multi-Agent Orchestration with Human-in-the-Loop Governance Testing...
+
+--- ENTERING: PLANNER NODE ---
+Generated Plan Steps:
+- 1. Extract the Q1 operations review PDF to identify the specific major issue reported in the North region.
+- 2. Query the SQL database to retrieve the list of all customers categorized as "Enterprise" located within the North region.
+- 3. Query the SQL database to aggregate the total revenue for the identified Enterprise customers in the North region for the Q1 period.
+- 4. Cross-reference the identified major issue from the PDF with the revenue data to assess the impact on account health.
+
+--- ENTERING: PDF EXTRACTOR NODE ---
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing extracted PDF data into 'pdf_context'...
+
+--- ENTERING: PDF EXTRACTOR NODE ---
+
+--- ENTERING: SQL ENGINEER NODE ---
+SQL Engineer Generated Query:
+>>> SELECT customer_id, company_name FROM customers WHERE tier = 'Enterprise' AND region = 'North';
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing SQL results into 'sql_result'...
+
+--- ENTERING: SQL ENGINEER NODE ---
+SQL Engineer Generated Query:
+>>> SELECT SUM(revenue) as total_q1_revenue FROM orders WHERE customer_id = 1 AND order_date BETWEEN '2026-01-01' AND '2026-03-31';
+
+--- ENTERING: STATE SYNCHRONIZER NODE ---
+Syncing SQL results into 'sql_result'...
+
+--- ENTERING: SQL ENGINEER NODE ---
+
+--- ENTERING: RETENTION PROPOSAL NODE ---
+>>> High-Risk Account Identified: TechCorp Solutions. Drafted Proposal.
+
+====================================================
+⚠️ GRAPH EXECUTION PAUSED: HUMAN APPROVAL REQUIRED
+====================================================
+Target Client: TechCorp Solutions
+Proposed Discount: 5-10%
+
+Proposal Details:
+TechCorp Solutions experienced severe API latency issues in Q1 2026, leading to deep dissatisfaction and a threat to delay contract expansions. Proactive intervention is required to restore trust and secure the expansion revenue.
+
+Do you approve this commercial proposal? [Y/N/Edit]: y
+Enter any notes/feedback for the final report:
+
+>>> Resuming Graph Execution with Human State Input...
+
+--- ENTERING: HUMAN APPROVAL GATE NODE ---
+Human Gate Decision Received: APPROVED
+Human Manager Feedback:
+
+--- ENTERING: FINAL REPORTER NODE ---
+
+==================== FINAL EXECUTIVE REPORT ====================
+
+# Executive Health Assessment Report: Q1 2026
+
+**Date:** April 14, 2026
+**Subject:** Q1 Operational Performance & Strategic Retention Analysis – TechCorp Solutions
+
+---
+
+### 1. Executive Summary
+Q1 2026 was characterized by a localized operational disruption in the North region, where a 45% spike in support tickets—driven by severe API latency—negatively impacted client sentiment. While global operations stabilized by March, the incident directly jeopardized our relationship with our high-priority account, TechCorp Solutions. The primary risk identified is the potential loss of projected contract expansion revenue due to diminished trust in our service reliability.
+
+### 2. Financial Impact Assessment
+*   **Total Q1 Revenue:** $95,000.00
+*   **Client at Risk:** TechCorp Solutions
+*   **Financial Exposure:** The threat of delayed contract expansions from TechCorp Solutions poses a significant risk to our Q2/Q3 growth targets. While the total Q1 revenue is $95k, the *expansion* revenue associated with this account represents a critical component of our regional performance metrics.
+
+### 3. Account Health Status
+**Status: CRITICAL RISK**
+*   **Rationale:** Despite the resolution of technical latency issues in February, the account remains in a "Critical Risk" state. The combination of severe service degradation and the client’s explicit threat to halt expansion plans necessitates immediate, high-touch intervention to prevent churn and restore the partnership.
+
+### 4. Commercial Retention Action & Governance
+*   **Retention Proposal:** A proactive discount of **5–10%** has been structured to incentivize the client to proceed with their contract expansions.
+*   **Governance Status:** **APPROVED**
+*   **Management Feedback:** No additional constraints were noted; the proposal is cleared for immediate execution to secure the account’s long-term commitment.
+
+### 5. Actionable Recommendations
+To mitigate the identified risks and stabilize the account, the following actions are required:
+
+1.  **Executive Outreach:** Schedule a formal business review with TechCorp Solutions leadership to acknowledge the Q1 service failures, present the remediation steps taken, and formally present the retention offer.
+2.  **Service Level Transparency:** Provide the client with a brief "Root Cause Analysis" summary to demonstrate that the North region latency issues have been fully resolved and that infrastructure safeguards are now in place.
+3.  **Expansion Acceleration:** Link the 5–10% discount directly to the signing of the expansion contract to ensure the financial incentive is tied to a concrete commitment from the client.
+4.  **Monitoring:** Place TechCorp Solutions on a "High-Touch" monitoring list for the next 90 days, with bi-weekly check-ins from the Account Management team to ensure service satisfaction remains high.
+
+================================================================
+
+Execution Completed!
+(agents-venv-2) ➜  autonomous-data-agents-langgraph git:(feat-human-in-the-loop) ✗
