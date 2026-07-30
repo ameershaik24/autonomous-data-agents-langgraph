@@ -436,6 +436,18 @@ workflow.add_conditional_edges(
 )
 
 
+def route_after_proposal(state: MultiAgentDataState) -> str:
+    if state.get("requires_human_approval"):
+        return "human_approval_gate"
+    return "final_reporter"
+
+
+workflow.add_conditional_edges(
+    "retention_proposal",
+    route_after_proposal,
+    {"human_approval_gate": "human_approval_gate", "final_reporter": "final_reporter"},
+)
+
 # 4. Now, compile the graph
 app = workflow.compile()
 print("LangGraph Multi-Agent Mesh Compiled Successfully!")
