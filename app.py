@@ -319,6 +319,57 @@ def route_after_sync(state: MultiAgentDataState) -> str:
     return "sql_engineer"
 
 
+class RetentionAnalysis(BaseModel):
+    requires_intervention: bool = Field(
+        description="True if customer is at critical risk of churn or contract non-renewal"
+    )
+    client: str = Field(description="Target company name or N/A")
+    proposed_discount: str = Field(description="Proposed discount range or N/A")
+    details: str = Field(
+        description="Detailed explanation of risk and proposal rationale"
+    )
+
+
+def retention_proposal_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: RETENTION PROPOSAL NODE ---")
+
+    pdf_context = state.get("pdf_context", "")
+    sql_result = state.get("sql_result", [])
+
+    prompt = f"""You are a Commercial Strategy Specialist.
+Analyze the extracted PDF context and SQL results to determine if any customer account is at critical risk.
+
+PDF Context:
+{pdf_context}
+
+SQL Results:
+{sql_result}
+"""
+
+    # Bind the schema directly to the model instance
+    structured_llm = llm.with_structured_output(RetentionAnalysis)
+
+    # Executing invocation directly returns a validated RetentionAnalysis object!
+    analysis: RetentionAnalysis = structured_llm.invoke(prompt)
+
+    # Convert Pydantic object to standard python dictionary for graph state storage
+    analysis_dict = analysis.model_dump()
+
+    requires_approval = analysis_dict.get("requires_intervention", False)
+
+    if requires_approval:
+        print(
+            f">>> High-Risk Account Identified: {analysis_dict.get('client')}. Drafted Proposal."
+        )
+    else:
+        print(">>> Account Health OK. No Human Intervention Needed.")
+
+    return {
+        "requires_human_approval": requires_approval,
+        "retention_proposal": analysis_dict,
+        "messages": [AIMessage(content=str(analysis_dict))],
+    }
+
 # Initialize the graph with our custom state schema
 workflow = StateGraph(MultiAgentDataState)
 
@@ -328,6 +379,7 @@ workflow.add_node("pdf_extractor", pdf_extractor_node)
 workflow.add_node("sql_engineer", sql_engineer_node)
 workflow.add_node("tools", tool_node)
 workflow.add_node("synchronizer", state_synchronizer_node)
+workflow.add_node("retention_proposal", retention_proposal_node)
 workflow.add_node("final_reporter", final_reporter_node)
 
 
