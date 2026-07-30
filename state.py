@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -22,3 +22,5 @@ class MultiAgentDataState(TypedDict):
     retention_proposal: Dict[
         str, Any
     ]  # Drafted proposal (e.g., {"client": "TechCorp", "discount": "15%"})
+    human_approval_status: Optional[str]  # "APPROVED", "REJECTED", or "MODIFIED"
+    human_feedback: Optional[str]  # Optional human comment/override
