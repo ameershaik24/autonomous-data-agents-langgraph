@@ -494,3 +494,44 @@ if __name__ == "__main__":
     for event in app.stream(initial_state, config=thread_config):
         pass  # Running node steps
 
+    # Check current state to verify the graph was paused at the interrupt
+    current_state = app.get_state(thread_config)
+
+    if current_state.next and "human_approval_gate" in current_state.next:
+        print("\n====================================================")
+        print("⚠️ GRAPH EXECUTION PAUSED: HUMAN APPROVAL REQUIRED")
+        print("====================================================")
+
+        proposal = current_state.values.get("retention_proposal", {})
+        print(f"Target Client: {proposal.get('client')}")
+        print(f"Proposed Discount: {proposal.get('proposed_discount')}")
+        print(f"\nProposal Details:\n{proposal.get('details')}\n")
+
+        # Prompt for human decision directly in the terminal
+        user_choice = (
+            input("Do you approve this commercial proposal? [Y/N/Edit]: ")
+            .strip()
+            .lower()
+        )
+        feedback = input("Enter any notes/feedback for the final report: ").strip()
+
+        approval_status = (
+            "APPROVED"
+            if user_choice == "y"
+            else ("MODIFIED" if user_choice == "edit" else "REJECTED")
+        )
+
+        # Update graph state with human decision
+        app.update_state(
+            thread_config,
+            {"human_approval_status": approval_status, "human_feedback": feedback},
+        )
+
+        print("\n>>> Resuming Graph Execution with Human State Input...")
+
+        # Phase 2: Resume execution from where it paused by passing None as input
+        for event in app.stream(None, config=thread_config):
+            pass
+
+    print("\nExecution Completed!")
+
