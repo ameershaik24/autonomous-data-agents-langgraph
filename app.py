@@ -306,8 +306,8 @@ def route_sql_engineer(state: MultiAgentDataState) -> str:
         return "tools"
 
     # If the agent did not make a tool call, it means it has reviewed the data/history
-    # and is ready to hand off to the final report synthesis.
-    return "final_reporter"
+    # Transition to retention check after SQL execution finishes
+    return "retention_proposal"
 
 
 # Synchronizer decides where to return control based on what tool just ran
@@ -431,8 +431,7 @@ workflow.add_conditional_edges(
     route_sql_engineer,
     {
         "tools": "tools",
-        "sql_engineer": "sql_engineer",  # Self-correction loop path
-        "final_reporter": "final_reporter",
+        "retention_proposal": "retention_proposal",
     },
 )
 
