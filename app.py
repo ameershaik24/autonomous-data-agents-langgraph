@@ -448,6 +448,9 @@ workflow.add_conditional_edges(
     {"human_approval_gate": "human_approval_gate", "final_reporter": "final_reporter"},
 )
 
+workflow.add_edge("human_approval_gate", "final_reporter")
+
+
 # 4. Now, compile the graph
 app = workflow.compile()
 print("LangGraph Multi-Agent Mesh Compiled Successfully!")
