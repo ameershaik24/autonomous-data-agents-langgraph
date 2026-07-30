@@ -10,6 +10,7 @@ from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from pydantic import BaseModel, Field
 from state import MultiAgentDataState
 
 load_dotenv()
