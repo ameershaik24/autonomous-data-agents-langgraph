@@ -1,3 +1,20 @@
+## 20th August 2026
+
+1. **Learnings**:
+   - I have extended the capability of this system by implementing a working demo of Human In The Loop (HITL) design approach. There's a new "rentention proposal" agent node which gets invoked after the flow finishes going through the "pdf_extractor" and "sql_engineer" agent nodes. This agent node would decide if a discount has to be given to the customer based on the criticality of losing the customer. Since giving a discount affects the revenue directly, a "human_approval_gate" node is defined, and the StateGraph is compiled by defining to interrupt_before this "human_approval_gate" node.
+   - The flow now would be,
+     - sql_engineer -> retention_proposal -> conditional human_approval (or) final_reporter
+     - human_approval -> final_reporter
+     By defining "interrupt_before" as "human_approval_gate", the graph execution flow would pause only if the execution "is about to go to" the human_approval_gate. If the flow goes directly to final_reporter node after retention_proposal, then the graph execution would NOT be paused. -- this is an important nuance to make a note of
+   - For this state graph execution to pause in-between, there needs to be some way of saving what has been done till now and using it when the execution resumes. For this, at the moment, the InMemorySaver from LangGraph checkpoint is being used - which by the name suggests it saves in the memory i.e., RAM.
+   - For this state graph execution to pause in-between, there also needs a thread_id or something, because multiple requests might have to be paused and there has to be some way to differentiate the graph states of the multiple requests. Thread ID comes here and at the moment, it is just hardcoded to "session-101"
+   - app.stream is something like play the graph - which would continue until it hits a breakpoint type (here interrupt_before) or finishes. The state to resume the execution can be passed as the first argument.
+
+2. **What more do I want to do?**
+   - Add a guardrail through deterministic code at the execution layer, which checks the proposed discount by the retention proposal node, and sets the require_human_approval explicitly. Thereby, even if the model hallucinates on whether or not human approval is required, we catch it through this deterministic guardrail.
+   - Make this script into an API, use request_id or other unique id to differentiate states across requests, and test pausing the state across multiple requests and validate that one state is not interferring with the other.
+   - Frontend may be?
+
 ## 17th July 2026
 
 1. I was drawing the flow of state from one agent to another neatly using draw.io and understanding each part of it. While doing this, it wasn't making sense as to how can route_sql_engineer send the control back to sql_engineer agent when there's an error in running the generated sql query. Because, if there's an error, the synchronizer agent would update it in the state and the route_after_sync method will send the control back to sql_engineer agent. So, the agent would already see the error through the past messages (which would also include the tool message) and would give a corrected query as tool call again. So, we would never have a flow wherein after the "sql_engineer" agent we would go back to it immediately - we have to either go to tools or to the next final_reporter agent. Thus, the initial code given by gemini had this "dead code" which was never reachable. I understood the flow of state/tokens in the cyclic graph through the drawing and corrected this mistake from vibe code instead of blindly keeping it.
