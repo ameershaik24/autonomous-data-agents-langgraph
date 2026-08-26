@@ -417,7 +417,9 @@ class RetentionAnalysis(BaseModel):
         description="True if customer is at critical risk of churn or contract non-renewal"
     )
     client: str = Field(description="Target company name or N/A")
-    proposed_discount: str = Field(description="Proposed discount range or N/A")
+    proposed_discount: str = Field(
+        description="Proposed discount percentage number (0-100)"
+    )
     details: str = Field(
         description="Detailed explanation of risk and proposal rationale"
     )
