@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 from typing import Any, Dict
 
@@ -126,9 +127,86 @@ def pdf_extractor_node(state: MultiAgentDataState) -> Dict[str, Any]:
     return {"messages": [response]}
 
 
+# Disallowed SQL command keywords
+FORBIDDEN_SQL_KEYWORDS = {
+    "DROP",
+    "DELETE",
+    "UPDATE",
+    "INSERT",
+    "ALTER",
+    "TRUNCATE",
+    "CREATE",
+    "REPLACE",
+    "GRANT",
+    "REVOKE",
+    "EXEC",
+    "EXECUTE",
+}
+
+
+def validate_sql_read_only(query: str) -> tuple[bool, str]:
+    """
+    Deterministically validates that an SQL query is strictly read-only (SELECT / PRAGMA / EXPLAIN).
+    Returns (is_valid, error_message).
+    """
+    # Remove single-line comments (e.g., -- This is a comment)
+    cleaned = re.sub(r"--.*?\n", " ", query)
+
+    # Remove multi-line comments (e.g., /* This is a comment */)
+    cleaned = re.sub(r"/\*.*?\*/", " ", cleaned, flags=re.DOTALL).strip()
+
+    if not cleaned:
+        return False, "Query is empty."
+
+    # Uppercase whole query, extract all words as tokens, using word boundary regex
+    tokens = re.findall(r"\b[A-Za-z_]+\b", cleaned.upper())
+
+    if not tokens:
+        return False, "Invalid query format."
+
+    # Enforce allowed starting statements
+    first_word = tokens[0]
+    allowed_starters = {"SELECT", "WITH", "PRAGMA", "EXPLAIN"}
+    if first_word not in allowed_starters:
+        return (
+            False,
+            f"Unauthorized operation: Query must begin with SELECT, WITH, PRAGMA, EXPLAIN. Found '{first_word}'.",
+        )
+
+    # Check for forbidden mutation keywords across all tokens
+    for token in tokens:
+        if token in FORBIDDEN_SQL_KEYWORDS:
+            return (
+                False,
+                f"Security Violation: Mutation keyword '{token}' is prohibited in read-only mode.",
+            )
+
+    # Prevent multi-statement query chaining (e.g., "SELECT 1; DROP TABLE users;")
+    # Allow a trailing semicolon if it's at the very end
+    statements = [s.strip() for s in cleaned.split(";") if s.strip()]
+    if len(statements) > 1:
+        return (
+            False,
+            "Security Violation: Multi-statement queries separated by semicolons are prohibited.",
+        )
+
+    return True, ""
+
+
 @tool
 def execute_sql_query(query: str) -> str:
     """Executes a SQL query against the company_sales.db SQLite database and returns the results or the database error message."""
+    """Executes a strictly read-only SQL query against the SQLite database."""
+    print(f"\n[Tool Execution] Received SQL Query: {query}")
+
+    # 1. Deterministic Pre-Execution Guardrail
+    is_valid, error_msg = validate_sql_read_only(query)
+    if not is_valid:
+        print(f"[Guardrail Blocked] {error_msg}")
+        # Return error as a tool message so the agent's self-correction loop catches it
+        return f"Database Error: Access Denied. {error_msg}"
+
+    # 2. Safe Execution
     db_name = "company_sales.db"
     db_path = os.path.join(script_dir, db_name)
 
