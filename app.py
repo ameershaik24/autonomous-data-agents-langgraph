@@ -429,15 +429,23 @@ def parse_discount_percentage(raw_val: Any) -> float:
 
 
 class RetentionAnalysis(BaseModel):
-    requires_intervention: bool = Field(
-        description="True if customer is at critical risk of churn or contract non-renewal"
+    client: str = Field(
+        description="Target company name requiring retention action, or 'N/A' if no account is at risk."
     )
-    client: str = Field(description="Target company name or N/A")
     proposed_discount: str = Field(
-        description="Proposed discount percentage number (0-100)"
+        description="Proposed retention discount percentage number (0-100), e.g., '15' or '0' if no discount is needed."
+    )
+    # Field ordering matters: defining 'proposed_discount' prior to 'requires_intervention'
+    # forces auto-regressive generation of the numeric value first, grounding the downstream boolean decision.
+    requires_intervention: bool = Field(
+        description=(
+            "Set to True if the proposed discount is strictly greater than 10%, "
+            "or if the customer requires mandatory human executive intervention/approval. "
+            "Set to False if proposed discount is 10% or below."
+        )
     )
     details: str = Field(
-        description="Detailed explanation of risk and proposal rationale"
+        description="Detailed explanation of the risk assessment, issue drivers, and rationale for the commercial proposal."
     )
 
 
