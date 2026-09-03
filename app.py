@@ -412,6 +412,22 @@ def route_after_sync(state: MultiAgentDataState) -> str:
     return "sql_engineer"
 
 
+def parse_discount_percentage(raw_val: Any) -> float:
+    """Safely extracts numeric discount percentage from strings (e.g., '15', '15%', '10-15') or numbers."""
+    if isinstance(raw_val, (int, float)):
+        return float(raw_val)
+    if not isinstance(raw_val, str):
+        return 0.0
+
+    # Extract all integer/decimal patterns
+    matches = re.findall(r"\d+(?:\.\d+)?", raw_val)
+    if not matches:
+        return 0.0
+
+    # If a range was generated (e.g., "10-15"), take the maximum to be safe
+    return max(float(m) for m in matches)
+
+
 class RetentionAnalysis(BaseModel):
     requires_intervention: bool = Field(
         description="True if customer is at critical risk of churn or contract non-renewal"
@@ -451,6 +467,27 @@ SQL Results:
     analysis_dict = analysis.model_dump()
 
     requires_approval = analysis_dict.get("requires_intervention", False)
+
+    # --- DETERMINISTIC BUSINESS LOGIC GUARDRAIL ---
+    # Parse the discount value into a numeric float
+    discount_num = parse_discount_percentage(
+        analysis_dict.get("proposed_discount", "0")
+    )
+
+    # Mandatory rule: Any discount strictly greater than 10% requires human approval
+    if discount_num > 10.0:
+        requires_approval = True
+        print(
+            f">>> Guardrail Triggered: Proposed discount is {discount_num}% (> 10%). Mandatory human approval required."
+        )
+
+        # Override any model hallucinations in the state dictionary
+        analysis_dict["requires_intervention"] = requires_approval
+    else:
+        # If <= 10%, fallback to the model's recommendation
+        pass
+
+    # ----------------------------------------------
 
     if requires_approval:
         print(
