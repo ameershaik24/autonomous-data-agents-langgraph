@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 from typing import Any, Dict
 
@@ -8,8 +9,10 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
+from pydantic import BaseModel, Field
 from state import MultiAgentDataState
 
 load_dotenv()
@@ -124,9 +127,86 @@ def pdf_extractor_node(state: MultiAgentDataState) -> Dict[str, Any]:
     return {"messages": [response]}
 
 
+# Disallowed SQL command keywords
+FORBIDDEN_SQL_KEYWORDS = {
+    "DROP",
+    "DELETE",
+    "UPDATE",
+    "INSERT",
+    "ALTER",
+    "TRUNCATE",
+    "CREATE",
+    "REPLACE",
+    "GRANT",
+    "REVOKE",
+    "EXEC",
+    "EXECUTE",
+}
+
+
+def validate_sql_read_only(query: str) -> tuple[bool, str]:
+    """
+    Deterministically validates that an SQL query is strictly read-only (SELECT / PRAGMA / EXPLAIN).
+    Returns (is_valid, error_message).
+    """
+    # Remove single-line comments (e.g., -- This is a comment)
+    cleaned = re.sub(r"--.*?\n", " ", query)
+
+    # Remove multi-line comments (e.g., /* This is a comment */)
+    cleaned = re.sub(r"/\*.*?\*/", " ", cleaned, flags=re.DOTALL).strip()
+
+    if not cleaned:
+        return False, "Query is empty."
+
+    # Uppercase whole query, extract all words as tokens, using word boundary regex
+    tokens = re.findall(r"\b[A-Za-z_]+\b", cleaned.upper())
+
+    if not tokens:
+        return False, "Invalid query format."
+
+    # Enforce allowed starting statements
+    first_word = tokens[0]
+    allowed_starters = {"SELECT", "WITH", "PRAGMA", "EXPLAIN"}
+    if first_word not in allowed_starters:
+        return (
+            False,
+            f"Unauthorized operation: Query must begin with SELECT, WITH, PRAGMA, EXPLAIN. Found '{first_word}'.",
+        )
+
+    # Check for forbidden mutation keywords across all tokens
+    for token in tokens:
+        if token in FORBIDDEN_SQL_KEYWORDS:
+            return (
+                False,
+                f"Security Violation: Mutation keyword '{token}' is prohibited in read-only mode.",
+            )
+
+    # Prevent multi-statement query chaining (e.g., "SELECT 1; DROP TABLE users;")
+    # Allow a trailing semicolon if it's at the very end
+    statements = [s.strip() for s in cleaned.split(";") if s.strip()]
+    if len(statements) > 1:
+        return (
+            False,
+            "Security Violation: Multi-statement queries separated by semicolons are prohibited.",
+        )
+
+    return True, ""
+
+
 @tool
 def execute_sql_query(query: str) -> str:
     """Executes a SQL query against the company_sales.db SQLite database and returns the results or the database error message."""
+    """Executes a strictly read-only SQL query against the SQLite database."""
+    print(f"\n[Tool Execution] Received SQL Query: {query}")
+
+    # 1. Deterministic Pre-Execution Guardrail
+    is_valid, error_msg = validate_sql_read_only(query)
+    if not is_valid:
+        print(f"[Guardrail Blocked] {error_msg}")
+        # Return error as a tool message so the agent's self-correction loop catches it
+        return f"Database Error: Access Denied. {error_msg}"
+
+    # 2. Safe Execution
     db_name = "company_sales.db"
     db_path = os.path.join(script_dir, db_name)
 
@@ -250,7 +330,7 @@ def state_synchronizer_node(state: MultiAgentDataState) -> Dict[str, Any]:
 
 
 FINAL_REPORTER_PROMPT = """You are a Senior Executive Business Analyst. Your job is to compile a highly polished, executive-ready health assessment report.
-You must synthesize the qualitative incident data from the PDF with the quantitative financial data from the SQL database.
+You must synthesize the qualitative incident data from the PDF, the quantitative financial data from the SQL database, and the commercial retention proposal along with its human governance approval status.
 
 Extracted PDF Operations Context:
 {pdf_context}
@@ -258,11 +338,17 @@ Extracted PDF Operations Context:
 Retrieved SQL Financial Data:
 {sql_result}
 
+Commercial Retention Proposal & Governance Decision:
+- Retention Proposal Details: {retention_proposal}
+- Governance Approval Status: {human_approval_status}
+- Management Feedback / Notes: {human_feedback}
+
 Provide a structured final response in clean Markdown with the following sections:
-1. **Executive Summary**: A high-level overview of what happened.
-2. **Financial Impact Assessment**: Explicitly reference the customer names and the total Q1 revenue ($95,000.00) at risk.
-3. **Account Health Status**: Grade the health (e.g., Critical Risk, Stable) based on the threat of contract delay.
-4. **Actionable Recommendations**: Next steps for the account management team.
+1. **Executive Summary**: A high-level overview of what happened and the operational risks identified.
+2. **Financial Impact Assessment**: Explicitly reference the customer names and total revenue at risk.
+3. **Account Health Status**: Grade the health (e.g., Critical Risk) based on support spikes and contract delays.
+4. **Commercial Retention Action & Governance**: Detail the retention offer drafted, whether it was approved or rejected by management, and incorporate any manager notes.
+5. **Actionable Recommendations**: Next steps for the account management team.
 """
 
 
@@ -270,10 +356,17 @@ def final_reporter_node(state: MultiAgentDataState) -> Dict[str, Any]:
     print("\n--- ENTERING: FINAL REPORTER NODE ---")
     pdf_context = state.get("pdf_context", "No PDF context available.")
     sql_result = state.get("sql_result", "No SQL results available.")
+    retention_proposal = state.get("retention_proposal", {})
+    human_approval_status = state.get("human_approval_status", "PENDING")
+    human_feedback = state.get("human_feedback", "No feedback provided.")
 
     # Format instructions and generate the final report
     prompt = FINAL_REPORTER_PROMPT.format(
-        pdf_context=pdf_context, sql_result=sql_result
+        pdf_context=pdf_context,
+        sql_result=sql_result,
+        retention_proposal=retention_proposal,
+        human_approval_status=human_approval_status,
+        human_feedback=human_feedback,
     )
     response = llm.invoke([HumanMessage(content=prompt)])
 
@@ -305,8 +398,8 @@ def route_sql_engineer(state: MultiAgentDataState) -> str:
         return "tools"
 
     # If the agent did not make a tool call, it means it has reviewed the data/history
-    # and is ready to hand off to the final report synthesis.
-    return "final_reporter"
+    # Transition to retention check after SQL execution finishes
+    return "retention_proposal"
 
 
 # Synchronizer decides where to return control based on what tool just ran
@@ -319,6 +412,128 @@ def route_after_sync(state: MultiAgentDataState) -> str:
     return "sql_engineer"
 
 
+def parse_discount_percentage(raw_val: Any) -> float:
+    """Safely extracts numeric discount percentage from strings (e.g., '15', '15%', '10-15') or numbers."""
+    if isinstance(raw_val, (int, float)):
+        return float(raw_val)
+    if not isinstance(raw_val, str):
+        return 0.0
+
+    # Extract all integer/decimal patterns
+    matches = re.findall(r"\d+(?:\.\d+)?", raw_val)
+    if not matches:
+        return 0.0
+
+    # If a range was generated (e.g., "10-15"), take the maximum to be safe
+    return max(float(m) for m in matches)
+
+
+class RetentionAnalysis(BaseModel):
+    client: str = Field(
+        description="Target company name requiring retention action, or 'N/A' if no account is at risk."
+    )
+    proposed_discount: str = Field(
+        description="Proposed retention discount percentage number (0-100), e.g., '15' or '0' if no discount is needed."
+    )
+    # Field ordering matters: defining 'proposed_discount' prior to 'requires_intervention'
+    # forces auto-regressive generation of the numeric value first, grounding the downstream boolean decision.
+    requires_intervention: bool = Field(
+        description=(
+            "Set to True if the proposed discount is strictly greater than 10%, "
+            "or if the customer requires mandatory human executive intervention/approval. "
+            "Set to False if proposed discount is 10% or below."
+        )
+    )
+    details: str = Field(
+        description="Detailed explanation of the risk assessment, issue drivers, and rationale for the commercial proposal."
+    )
+
+
+def retention_proposal_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: RETENTION PROPOSAL NODE ---")
+
+    pdf_context = state.get("pdf_context", "")
+    sql_result = state.get("sql_result", [])
+
+    prompt = f"""You are a Commercial Strategy Specialist.
+Analyze the extracted PDF context and SQL results to determine if any customer account is at critical risk.
+
+PDF Context:
+{pdf_context}
+
+SQL Results:
+{sql_result}
+"""
+
+    # Bind the schema directly to the model instance
+    structured_llm = llm.with_structured_output(RetentionAnalysis)
+
+    # Executing invocation directly returns a validated RetentionAnalysis object!
+    analysis: RetentionAnalysis = structured_llm.invoke(prompt)
+
+    # Convert Pydantic object to standard python dictionary for graph state storage
+    analysis_dict = analysis.model_dump()
+
+    requires_approval = analysis_dict.get("requires_intervention", False)
+
+    # --- DETERMINISTIC BUSINESS LOGIC GUARDRAIL ---
+    # Parse the discount value into a numeric float
+    discount_num = parse_discount_percentage(
+        analysis_dict.get("proposed_discount", "0")
+    )
+
+    # Mandatory rule: Any discount strictly greater than 10% requires human approval
+    if discount_num > 10.0:
+        requires_approval = True
+        print(
+            f">>> Guardrail Triggered: Proposed discount is {discount_num}% (> 10%). Mandatory human approval required."
+        )
+
+        # Override any model hallucinations in the state dictionary
+        analysis_dict["requires_intervention"] = requires_approval
+    else:
+        # If <= 10%, fallback to the model's recommendation
+        pass
+
+    # ----------------------------------------------
+
+    if requires_approval:
+        print(
+            f">>> High-Risk Account Identified: {analysis_dict.get('client')}. Drafted Proposal."
+        )
+    else:
+        print(">>> Account Health OK. No Human Intervention Needed.")
+
+    return {
+        "requires_human_approval": requires_approval,
+        "retention_proposal": analysis_dict,
+        "messages": [AIMessage(content=str(analysis_dict))],
+    }
+
+
+def human_approval_gate_node(state: MultiAgentDataState) -> Dict[str, Any]:
+    print("\n--- ENTERING: HUMAN APPROVAL GATE NODE ---")
+
+    status = state.get("human_approval_status", "REJECTED")
+    feedback = state.get("human_feedback", "No feedback provided.")
+    proposal = state.get("retention_proposal", {})
+
+    print(f"Human Gate Decision Received: {status}")
+    print(f"Human Manager Feedback: {feedback}")
+
+    summary_message = (
+        f"--- HUMAN GOVERNANCE RECORD ---\n"
+        f"Proposal for {proposal.get('client', 'Client')}:\n"
+        f"Status: {status}\n"
+        f"Manager Notes: {feedback}\n"
+    )
+
+    return {"messages": [AIMessage(content=summary_message)]}
+
+
+# Initialize in-memory checkpointer for thread persistence
+checkpointer = InMemorySaver()
+
 # Initialize the graph with our custom state schema
 workflow = StateGraph(MultiAgentDataState)
 
@@ -328,6 +543,8 @@ workflow.add_node("pdf_extractor", pdf_extractor_node)
 workflow.add_node("sql_engineer", sql_engineer_node)
 workflow.add_node("tools", tool_node)
 workflow.add_node("synchronizer", state_synchronizer_node)
+workflow.add_node("retention_proposal", retention_proposal_node)
+workflow.add_node("human_approval_gate", human_approval_gate_node)
 workflow.add_node("final_reporter", final_reporter_node)
 
 
@@ -357,15 +574,31 @@ workflow.add_conditional_edges(
     route_sql_engineer,
     {
         "tools": "tools",
-        "sql_engineer": "sql_engineer",  # Self-correction loop path
-        "final_reporter": "final_reporter",
+        "retention_proposal": "retention_proposal",
     },
 )
 
 
+def route_after_proposal(state: MultiAgentDataState) -> str:
+    if state.get("requires_human_approval"):
+        return "human_approval_gate"
+    return "final_reporter"
+
+
+workflow.add_conditional_edges(
+    "retention_proposal",
+    route_after_proposal,
+    {"human_approval_gate": "human_approval_gate", "final_reporter": "final_reporter"},
+)
+
+workflow.add_edge("human_approval_gate", "final_reporter")
+
+
 # 4. Now, compile the graph
-app = workflow.compile()
-print("LangGraph Multi-Agent Mesh Compiled Successfully!")
+app = workflow.compile(
+    checkpointer=checkpointer, interrupt_before=["human_approval_gate"]
+)
+print("LangGraph Multi-Agent HITL with Guardrails Mesh Compiled Successfully!")
 
 
 if __name__ == "__main__":
@@ -375,6 +608,57 @@ if __name__ == "__main__":
         "to check their account health."
     )
 
-    print("Starting Multi-Agent Orchestration Testing...")
+    print(
+        "Starting Multi-Agent Orchestration with Human-in-the-Loop Governance Testing..."
+    )
+
+    # Thread ID is required when using checkpointers to track execution state
+    thread_config = {"configurable": {"thread_id": "session-101"}}
+
     initial_state = {"messages": [HumanMessage(content=test_query)]}
-    app.invoke(initial_state)
+
+    # Phase 1: Stream graph until it hits the interrupt boundary
+    for event in app.stream(initial_state, config=thread_config):
+        pass  # Running node steps
+
+    # Check current state to verify the graph was paused at the interrupt
+    current_state = app.get_state(thread_config)
+
+    if current_state.next and "human_approval_gate" in current_state.next:
+        print("\n====================================================")
+        print("⚠️ GRAPH EXECUTION PAUSED: HUMAN APPROVAL REQUIRED")
+        print("====================================================")
+
+        proposal = current_state.values.get("retention_proposal", {})
+        print(f"Target Client: {proposal.get('client')}")
+        print(f"Proposed Discount: {proposal.get('proposed_discount')}")
+        print(f"\nProposal Details:\n{proposal.get('details')}\n")
+
+        # Prompt for human decision directly in the terminal
+        user_choice = (
+            input("Do you approve this commercial proposal? [Y/N/Edit]: ")
+            .strip()
+            .lower()
+        )
+        feedback = input("Enter any notes/feedback for the final report: ").strip()
+
+        approval_status = (
+            "APPROVED"
+            if user_choice == "y"
+            else ("MODIFIED" if user_choice == "edit" else "REJECTED")
+        )
+
+        # Update graph state with human decision
+        app.update_state(
+            thread_config,
+            {"human_approval_status": approval_status, "human_feedback": feedback},
+        )
+
+        print("\n>>> Resuming Graph Execution with Human State Input...")
+
+        # Phase 2: Resume execution from where it paused by passing None as input
+        for event in app.stream(None, config=thread_config):
+            pass
+
+    print("\nExecution Completed!")
+

@@ -106,7 +106,7 @@ To mitigate the risk to our Q1 revenue and restore the partnership with TechCorp
 Below is the architectural blueprint of the multi-agent orchestration mesh. It illustrates the stateless node execution, the centralized `MultiAgentDataState` boundary, and the cyclic self-correction loop that manages the SQL execution.
 
 <p align="center">
-  <img src="images/graph_data_agents_diagram.svg" alt="LangGraph Multi-Agent Architecture Diagram" width="700">
+  <img src="images/graph_data_agents_diagram.png" alt="LangGraph Multi-Agent Architecture Diagram" width="700">
 </p>
 
 ### Key Flow Mechanics Highlighted in the Diagram:

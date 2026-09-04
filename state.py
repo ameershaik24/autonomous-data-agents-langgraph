@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Dict, List
+from typing import Annotated, Any, Dict, List, Optional
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
@@ -16,3 +16,11 @@ class MultiAgentDataState(TypedDict):
     sql_result: List[Dict[str, Any]]  # The raw data returned by the DB
     sql_error: str  # Any error message thrown by the DB execution
     final_chart_path: str  # Path to the generated Matplotlib chart image
+
+    # NEW: Human-in-the-Loop State Variables
+    requires_human_approval: bool  # Flag indicating if high-risk account was detected
+    retention_proposal: Dict[
+        str, Any
+    ]  # Drafted proposal (e.g., {"client": "TechCorp", "discount": "15%"})
+    human_approval_status: Optional[str]  # "APPROVED", "REJECTED", or "MODIFIED"
+    human_feedback: Optional[str]  # Optional human comment/override
