@@ -598,7 +598,7 @@ workflow.add_edge("human_approval_gate", "final_reporter")
 app = workflow.compile(
     checkpointer=checkpointer, interrupt_before=["human_approval_gate"]
 )
-print("LangGraph Multi-Agent HITL Mesh Compiled Successfully!")
+print("LangGraph Multi-Agent HITL with Guardrails Mesh Compiled Successfully!")
 
 
 if __name__ == "__main__":
